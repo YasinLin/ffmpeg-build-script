@@ -6,7 +6,7 @@
 PROGNAME=$(basename "$0")
 FFMPEG_VERSION=6.0
 SCRIPT_VERSION=1.49
-CWD=$(pwd)
+CWD="/opt/ffmpeg"
 PACKAGES="$CWD/packages"
 WORKSPACE="$CWD/workspace"
 CFLAGS="-I$WORKSPACE/include"
@@ -19,6 +19,9 @@ NONFREE_AND_GPL=false
 LATEST=false
 MANPAGES=1
 CURRENT_PACKAGE_VERSION=0
+
+export LDFLAGS="${LDFLAGS}"
+export CPPFLAGS="${CFLAGS}"
 
 # Check for Apple Silicon
 if [[ ("$(uname -m)" == "arm64") && ("$OSTYPE" == "darwin"*) ]]; then
@@ -363,6 +366,14 @@ if build "zlib" "1.2.13"; then
   build_done "zlib" $CURRENT_PACKAGE_VERSION
 fi
 
+if build "xz" "5.4.0"; then
+  download "https://github.com/tukaani-project/xz/releases/download/v$CURRENT_PACKAGE_VERSION/xz-$CURRENT_PACKAGE_VERSION.tar.bz2"
+  execute cmake . -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF
+  execute make -j $MJOBS
+  execute make install
+  build_done "xz" $CURRENT_PACKAGE_VERSION
+fi
+
 if build "m4" "1.4.19"; then
   download "https://ftp.gnu.org/gnu/m4/m4-$CURRENT_PACKAGE_VERSION.tar.gz"
   execute ./configure --prefix="${WORKSPACE}"
@@ -445,6 +456,16 @@ if build "cmake" "3.27.7"; then
   execute make install
   build_done "cmake" $CURRENT_PACKAGE_VERSION
 fi
+export CMAKE_PREFIX_PATH=${WORKSPACE} 
+
+if build "cunit" "2.1-3"; then
+  download "https://sourceforge.net/projects/cunit/files/CUnit/$CURRENT_PACKAGE_VERSION/CUnit-$CURRENT_PACKAGE_VERSION.tar.bz2/download" "cunit-$CURRENT_PACKAGE_VERSION.tar.bz2"
+  execute ./bootstrap "${WORKSPACE}"
+  execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static 
+  execute make -j $MJOBS
+  execute make install
+  build_done "cunit" $CURRENT_PACKAGE_VERSION
+fi
 
 ##
 ## video library
@@ -453,11 +474,12 @@ fi
 if command_exists "python3"; then
   # dav1d needs meson and ninja along with nasm to be built
   if command_exists "pip3"; then
-    # meson and ninja can be installed via pip3
-    execute pip3 install pip setuptools --quiet --upgrade --no-cache-dir --disable-pip-version-check
+    # meson and ninja can be installed via pip3 
+    #--upgrade
+    execute pip3 install pip setuptools --quiet --no-cache-dir --disable-pip-version-check --break-system-packages
     for r in meson ninja; do
       if ! command_exists ${r}; then
-        execute pip3 install ${r} --quiet --upgrade --no-cache-dir --disable-pip-version-check
+        execute pip3 install ${r} --quiet --upgrade --no-cache-dir --disable-pip-version-check --break-system-packages
       fi
       export PATH=$PATH:~/Library/Python/3.9/bin
     done
@@ -818,8 +840,6 @@ if build "libtiff" "4.5.0"; then
 fi
 if build "libpng" "1.6.39"; then
   download "https://sourceforge.net/projects/libpng/files/libpng16/$CURRENT_PACKAGE_VERSION/libpng-$CURRENT_PACKAGE_VERSION.tar.gz" "libpng-$CURRENT_PACKAGE_VERSION.tar.gz"
-  export LDFLAGS="${LDFLAGS}"
-  export CPPFLAGS="${CFLAGS}"
   execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static
   execute make -j $MJOBS
   execute make install
@@ -827,7 +847,7 @@ if build "libpng" "1.6.39"; then
 fi
 
 ## does not compile on monterey -> _PrintGifError
-if [[ "$OSTYPE" != "darwin"* ]]; then
+# if [[ "$OSTYPE" != "darwin"* ]]; then
   if build "libwebp" "1.2.2"; then
     # libwebp can fail to compile on Ubuntu if these flags were left set to CFLAGS
     CPPFLAGS=
@@ -842,7 +862,7 @@ if [[ "$OSTYPE" != "darwin"* ]]; then
     build_done "libwebp" $CURRENT_PACKAGE_VERSION
   fi
   CONFIGURE_OPTIONS+=("--enable-libwebp")
-fi
+# fi
 ##
 ## other library
 ##
@@ -858,9 +878,12 @@ fi
 
 if build "FreeType2" "2.11.1"; then
   download "https://downloads.sourceforge.net/freetype/freetype-$CURRENT_PACKAGE_VERSION.tar.xz"
-  execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static
-  execute make -j $MJOBS
-  execute make install
+  # execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static
+  # execute make -j $MJOBS
+  # execute make install
+  execute meson build --prefix="${WORKSPACE}" --buildtype=release --default-library=static --libdir="${WORKSPACE}"/lib --wipe
+  execute ninja -C build
+  execute ninja -C build install
   build_done "FreeType2" $CURRENT_PACKAGE_VERSION
 fi
 
@@ -897,8 +920,365 @@ if build "libzmq" "4.3.1"; then
   execute make -j $MJOBS
   execute make install
   build_done "libzmq" $CURRENT_PACKAGE_VERSION
-  CONFIGURE_OPTIONS+=("--enable-libzmq")
 fi
+CONFIGURE_OPTIONS+=("--enable-libzmq")
+
+
+##
+## ass library
+##
+
+if build "harfbuzz" "3.2.0"; then
+  download "https://github.com/harfbuzz/harfbuzz/releases/download/$CURRENT_PACKAGE_VERSION/harfbuzz-$CURRENT_PACKAGE_VERSION.tar.xz"
+  execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static
+  execute make -j $MJOBS
+  execute make install
+  build_done "harfbuzz" $CURRENT_PACKAGE_VERSION
+fi
+if build "fribidi" "1.0.12"; then
+  download "https://github.com/fribidi/fribidi/releases/download/v$CURRENT_PACKAGE_VERSION/fribidi-$CURRENT_PACKAGE_VERSION.tar.xz"
+  execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static
+  execute make -j $MJOBS
+  execute make install
+  build_done "fribidi" $CURRENT_PACKAGE_VERSION
+fi
+if build "libass" "0.17.0"; then
+  download "https://github.com/libass/libass/releases/download/$CURRENT_PACKAGE_VERSION/libass-$CURRENT_PACKAGE_VERSION.tar.gz"
+  # if [[ "$OSTYPE" == "darwin"* ]]; then
+  #   export XML_CATALOG_FILES=/usr/local/etc/xml/catalog 
+  # fi
+  execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static
+  execute make -j $MJOBS
+  execute make install
+  build_done "libass" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-libass")
+
+
+
+##
+## libxml2 library
+##
+if command_exists "python3"; then
+  if build "libxml2" "2.9.12"; then
+    download "http://xmlsoft.org/download/libxml2-$CURRENT_PACKAGE_VERSION.tar.gz"
+    execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static  --with-history --with-python=/usr/local/bin/python3
+    execute make -j $MJOBS
+    execute make install
+    build_done "libxml2" $CURRENT_PACKAGE_VERSION
+  fi
+  CONFIGURE_OPTIONS+=("--enable-libxml2")
+fi
+
+
+
+##
+## bzip2 library
+##
+
+if $NONFREE_AND_GPL; then
+  if build "bzip2" "1.0.8"; then
+    download "https://gitlab.com/bzip2/bzip2/-/archive/ci-large-tests/bzip2-ci-large-tests.tar.gz"
+    execute meson build --prefix="${WORKSPACE}" --buildtype=release --default-library=static --libdir="${WORKSPACE}"/lib
+    execute ninja -C build
+    execute ninja -C build install
+    build_done "bzip2" $CURRENT_PACKAGE_VERSION
+  fi
+fi
+
+
+##
+## expat library
+##
+if build "expat" "2.5.0"; then
+  download "https://github.com/libexpat/libexpat/releases/download/R_2_5_0/expat-$CURRENT_PACKAGE_VERSION.tar.bz2"
+  execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static
+  execute make -j $MJOBS
+  execute make install
+  build_done "expat" $CURRENT_PACKAGE_VERSION
+fi
+#
+# fontconfig library
+#
+if build "fontconfig" "2.14.1"; then
+  download "https://www.freedesktop.org/software/fontconfig/release/fontconfig-$CURRENT_PACKAGE_VERSION.tar.gz"
+  execute meson build --prefix="${WORKSPACE}" --buildtype=release --default-library=static --libdir="${WORKSPACE}"/lib --wipe
+  execute ninja -C build
+  execute ninja -C build install
+  build_done "fontconfig" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-fontconfig")
+
+##
+## bluray library
+##
+
+if $NONFREE_AND_GPL; then
+  if build "libbluray" "1.3.4"; then
+    download "https://download.videolan.org/pub/videolan/libbluray/$CURRENT_PACKAGE_VERSION/libbluray-$CURRENT_PACKAGE_VERSION.tar.bz2"
+    execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static --disable-bdjava-jar
+    execute make -j $MJOBS
+    execute make install
+    build_done "libbluray" $CURRENT_PACKAGE_VERSION
+  fi
+  CONFIGURE_OPTIONS+=("--enable-libbluray")
+fi
+
+
+##
+## gsm library
+##
+
+if build "gsm" "1.0.22"; then
+  download "https://www.quut.com/gsm/gsm-$CURRENT_PACKAGE_VERSION.tar.gz"
+  gsm_package="$PACKAGES"/gsm-"$CURRENT_PACKAGE_VERSION"
+  echo $gsm_package
+  # escaped_workspace=$(echo "$WORKSPACE" | sed 's/\//\\\//g')
+  # echo 's/^INSTALL_ROOT[^=]*=/INSTALL_ROOT	= '$escaped_workspace'/g'
+  # echo "$PACKAGES"/gsm-$CURRENT_PACKAGE_VERSION/Makefile
+  # sed -i.backup "s/^INSTALL_ROOT[^=]*=/INSTALL_ROOT=$escaped_workspace/g" "$PACKAGES"/gsm-$CURRENT_PACKAGE_VERSION/Makefile
+  execute make
+  execute rm -f "$WORKSPACE"/lib/libgsm.a 
+  execute mkdir -p "$WORKSPACE"/include/gsm
+  execute cp "$gsm_package"/inc/gsm.h "$WORKSPACE"/include/gsm
+  execute cp "$gsm_package"/lib/libgsm.a "$WORKSPACE"/lib
+  build_done "gsm" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-libgsm")
+
+
+##
+## libiconv library
+##
+
+if build "libiconv" "1.17"; then
+  download "https://ftp.gnu.org/pub/gnu/libiconv/libiconv-$CURRENT_PACKAGE_VERSION.tar.gz"
+  execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static
+  execute make -j $MJOBS
+  execute make install
+  build_done "libiconv" $CURRENT_PACKAGE_VERSION
+fi
+
+
+##
+## libmodplug library
+##
+
+if build "libmodplug" "0.8.8.5"; then
+  download "http://sourceforge.net/projects/modplug-xmms/files/libmodplug/$CURRENT_PACKAGE_VERSION/libmodplug-$CURRENT_PACKAGE_VERSION.tar.gz/download"  "libmodplug-$CURRENT_PACKAGE_VERSION.tar.gz"
+  execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static
+  execute make -j $MJOBS
+  execute make install
+  build_done "libmodplug" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-libmodplug")
+
+
+
+##
+## libmysofa library
+##
+
+if build "libmysofa" "1.2.1"; then
+  download "https://codeload.github.com/hoene/libmysofa/tar.gz/refs/tags/v$CURRENT_PACKAGE_VERSION" "libmysofa-$CURRENT_PACKAGE_VERSION.tar.gz"
+  execute cmake . -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include  -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF 
+  execute make -j $MJOBS
+  execute make install
+  build_done "libmysofa" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-libmysofa")
+
+##
+## gtest library
+##
+if build "gtest" "release-1.8.0"; then
+  download "https://github.com/google/googletest/archive/refs/tags/$CURRENT_PACKAGE_VERSION.tar.gz" "gtest-$CURRENT_PACKAGE_VERSION.tar.gz"
+  execute cmake . -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF 
+  execute make -j $MJOBS
+  execute make install
+  build_done "gtest" $CURRENT_PACKAGE_VERSION
+fi
+
+
+
+##
+## libopenh264 library
+## 如果编译失败，在openh264.pc里面添加 Libs: 里面加上 -lstdc++
+##
+if build "libopenh264" "2.3.0"; then
+  download "https://github.com/cisco/openh264/archive/v$CURRENT_PACKAGE_VERSION.tar.gz" "libopenh264-$CURRENT_PACKAGE_VERSION.tar.gz"
+  execute meson build --prefix="${WORKSPACE}" --buildtype=release --default-library=static --libdir="${WORKSPACE}"/lib  
+  execute ninja -C build
+  execute ninja -C build install
+  sed -i.backup 's/-lopenh264 -lm/-lopenh264 -lm -lstdc++/g' "${WORKSPACE}/lib/pkgconfig/openh264.pc"
+  build_done "libopenh264" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-libopenh264")
+
+
+##
+## libsnappy library
+##
+if build "libsnappy" "1.1.9"; then
+  download "https://github.com/google/snappy/archive/refs/tags/$CURRENT_PACKAGE_VERSION.tar.gz" "snappy-$CURRENT_PACKAGE_VERSION.tar.gz"
+  execute cmake . -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF -DSNAPPY_BUILD_TESTS=OFF -DSNAPPY_BUILD_BENCHMARKS=OFF
+  execute make -j $MJOBS
+  execute make install
+  build_done "libsnappy" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-libsnappy")
+
+
+
+
+##
+## libopenjpeg library
+##
+if build "libopenjpeg" "2.5.0"; then
+  download "https://github.com/uclouvain/openjpeg/archive/refs/tags/v$CURRENT_PACKAGE_VERSION.tar.gz" "libopenjpeg-$CURRENT_PACKAGE_VERSION.tar.gz"
+  execute cmake . -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF 
+  execute make -j $MJOBS
+  execute make install
+  build_done "libopenjpeg" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-libopenjpeg")
+
+
+
+##
+## librubberband library
+##
+if build "librubberband" "3.1.2"; then
+  download "https://breakfastquay.com/files/releases/rubberband-$CURRENT_PACKAGE_VERSION.tar.bz2"
+  execute meson build --prefix="${WORKSPACE}" --buildtype=release --default-library=static --libdir="${WORKSPACE}"/lib
+  execute ninja -C build
+  execute ninja -C build install
+  build_done "librubberband" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-librubberband")
+
+
+##
+## libshine library
+##
+if build "libshine" "3.1.1"; then
+  download "https://github.com/toots/shine/releases/download/$CURRENT_PACKAGE_VERSION/shine-$CURRENT_PACKAGE_VERSION.tar.gz"
+  execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static
+  execute make -j $MJOBS
+  execute make install
+  build_done "libshine" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-libshine")
+
+
+##
+## libsoxr library
+##
+if build "libsoxr" "0.1.3"; then
+  download "https://sourceforge.net/projects/soxr/files/soxr-$CURRENT_PACKAGE_VERSION-Source.tar.xz/download" "soxr-$CURRENT_PACKAGE_VERSION.tar.gz"
+  execute cmake . -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF
+  execute make -j $MJOBS
+  execute make install
+  build_done "libsoxr" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-libsoxr")
+
+
+##
+## libspeex library
+##
+if build "libspeex" "1.2.0"; then
+  download "http://downloads.xiph.org/releases/speex/speex-$CURRENT_PACKAGE_VERSION.tar.gz"
+  execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static
+  execute make -j $MJOBS
+  execute make install
+  build_done "libspeex" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-libspeex")
+
+
+##
+## libtwolame library
+##
+if build "libtwolame" "0.4.0"; then
+  download "https://downloads.sourceforge.net/twolame/twolame-$CURRENT_PACKAGE_VERSION.tar.gz"
+  execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static
+  execute make -j $MJOBS
+  execute make install
+
+  build_done "libtwolame" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-libtwolame")
+
+
+##
+## libvmaf library
+## 如果编译失败，在libvmaf.pc里面添加 Libs: 里面加上 -lstdc++
+##
+if build "libvmaf" "2.3.1"; then
+  download "https://github.com/Netflix/vmaf/archive/refs/tags/v$CURRENT_PACKAGE_VERSION.tar.gz" "vmaf-$CURRENT_PACKAGE_VERSION.tar.gz"
+  export CXXFLAGS=-pthread
+  execute meson setup libvmaf libvmaf/build --buildtype release  --default-library=static --libdir="${WORKSPACE}"/lib  -Denable_asm=false -Denable_tests=false
+  execute ninja -C libvmaf/build
+  execute ninja -C libvmaf/build install
+  sed -i.backup 's/-lvmaf -lm/-lvmaf -lm -lstdc++/g' "${WORKSPACE}/lib/pkgconfig/libvmaf.pc"
+  build_done "libvmaf" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-libvmaf")
+
+##
+## libvo-amrwbenc library
+##
+if build "libvo-amrwbenc" "2.3.1"; then
+  download "https://downloads.sourceforge.net/project/opencore-amr/vo-amrwbenc/vo-amrwbenc-0.1.3.tar.gz?ts=gAAAAABmUEI_yfiSStpNGgV2D-VJrAnPrTQbWRENrkVOTQK9-1Snq75Yq5_sg9qepZNCUEpugIWGH_k_Yoz_EcywkCCpafAQdw%3D%3D&r=https%3A%2F%2Fsourceforge.net%2Fprojects%2Fopencore-amr%2Ffiles%2Fvo-amrwbenc%2Fvo-amrwbenc-$CURRENT_PACKAGE_VERSION.tar.gz%2Fdownload" "vo-amrwbenc-$CURRENT_PACKAGE_VERSION.tar.gz"
+  execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static --enable-pic
+  execute make -j $MJOBS
+  execute make install
+  build_done "libvo-amrwbenc" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-libvo-amrwbenc")
+
+
+##
+## libxavs library
+##
+if $NONFREE_AND_GPL; then
+  if build "libxavs" "r55"; then
+    download "https://sourceforge.net/code-snapshots/svn/x/xa/xavs/code/xavs-code-$CURRENT_PACKAGE_VERSION-trunk.zip" "xavs-code-$CURRENT_PACKAGE_VERSION.tar.zip"
+    execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static  --disable-asm
+    execute make -j $MJOBS
+    execute make install
+    build_done "libxavs" $CURRENT_PACKAGE_VERSION
+  fi
+  CONFIGURE_OPTIONS+=("--enable-libxavs")
+fi
+
+
+##
+## gettext library
+##
+if $NONFREE_AND_GPL; then
+  if build "gettext" "0.22.5"; then
+    download "https://ftp.gnu.org/pub/gnu/gettext/gettext-$CURRENT_PACKAGE_VERSION.tar.gz"
+    execute ./configure --prefix="${WORKSPACE}" --enable-static --disable-shared
+    execute make -j $MJOBS
+    execute make install
+    build_done "gettext" $CURRENT_PACKAGE_VERSION
+  fi
+fi
+
+##
+## libzvbi library
+##
+if build "libzvbi" "0.2.42"; then
+  download "https://github.com/zapping-vbi/zvbi/archive/refs/tags/v$CURRENT_PACKAGE_VERSION.tar.gz" "zvbi-$CURRENT_PACKAGE_VERSION.tar.gz"
+  execute ./autogen.sh --prefix="${WORKSPACE}"
+  execute ./configure --prefix="${WORKSPACE}" --disable-shared --enable-static --disable-dvb --disable-bktr --disable-nls --disable-proxy --without-doxygen --with-pic --without-x
+  execute make -j $MJOBS
+  execute make install
+  build_done "libzvbi" $CURRENT_PACKAGE_VERSION
+fi
+CONFIGURE_OPTIONS+=("--enable-libzvbi")
 
 ##
 ## HWaccel library
@@ -959,6 +1339,34 @@ EXTRA_VERSION=""
 if [[ "$OSTYPE" == "darwin"* ]]; then
   EXTRA_VERSION="${FFMPEG_VERSION}"
 fi
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  ##
+  ## glew library
+  ##
+  if build "glew" "2.2.0"; then
+    download "https://downloads.sourceforge.net/project/glew/glew/$CURRENT_PACKAGE_VERSION/glew-$CURRENT_PACKAGE_VERSION.tgz?ts=gAAAAABmUFwLNVBlnLYwFu66kCRJsx5agAlj-jmZfJ5VfouY4ZF2U76DIhNlucqRdOK52eXIzDpp19sKLJRjiFKaj9SG3A-ndA%3D%3D&r=https%3A%2F%2Fsourceforge.net%2Fprojects%2Fglew%2Ffiles%2Fglew%2F$CURRENT_PACKAGE_VERSION%2Fglew-2.2.0.tgz%2Fdownload" "glew-$CURRENT_PACKAGE_VERSION.tgz"
+    cd build
+    execute cmake ./cmake -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF
+    execute make -j $MJOBS
+    execute make install
+    build_done "glew" $CURRENT_PACKAGE_VERSION
+  fi
+  EXTRALIBS+=" -lglew"
+
+  ##
+  ## glew library
+  ##
+  if build "glfw" "3.3.8"; then
+    download "https://github.com/glfw/glfw/archive/refs/tags/$CURRENT_PACKAGE_VERSION.tar.gz" "glfw-$CURRENT_PACKAGE_VERSION.tgz"
+    execute cmake . -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF
+    execute make -j $MJOBS
+    execute make install
+    build_done "glfw" $CURRENT_PACKAGE_VERSION
+  fi
+  EXTRALIBS+=" -lglfw3"
+fi
+
 
 if [ -d "$CWD/.git" ]; then
   echo -e "\nTemporarily moving .git dir to .git.bak to workaround ffmpeg build bug" #causing ffmpeg version number to be wrong
