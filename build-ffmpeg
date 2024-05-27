@@ -1393,7 +1393,7 @@ git apply $FFMPEG_BUILD_PATH/ffmpeg-gl-transition/ffmpeg6.0.diff
 if [[ "$OSTYPE" == "darwin"* ]]; then
   EXTRALIBS+=" -framework Cocoa -framework IOKit"
 fi
-CONFIGURE_OPTIONS+=("--enable-filter=gltransition")
+CONFIGURE_OPTIONS+=("--enable-opengl --enable-filter=gltransition")
 
 echo "configure $FFMPEG_VERSION"
 # shellcheck disable=SC2086
