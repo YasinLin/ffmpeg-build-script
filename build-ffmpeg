@@ -23,6 +23,9 @@ CURRENT_PACKAGE_VERSION=0
 export LDFLAGS="${LDFLAGS}"
 export CPPFLAGS="${CFLAGS}"
 
+export FFMPEG_BUILD_PATH="`pwd`"
+echo "${FFMPEG_BUILD_PATH}"
+
 # Check for Apple Silicon
 if [[ ("$(uname -m)" == "arm64") && ("$OSTYPE" == "darwin"*) ]]; then
   # If arm64 AND darwin (macOS)
@@ -368,7 +371,7 @@ fi
 
 if build "xz" "5.4.0"; then
   download "https://github.com/tukaani-project/xz/releases/download/v$CURRENT_PACKAGE_VERSION/xz-$CURRENT_PACKAGE_VERSION.tar.bz2"
-  execute cmake . -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF
+  execute cmake . -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF  -DUSE_STATIC_LIBSTDCXX=ON
   execute make -j $MJOBS
   execute make install
   build_done "xz" $CURRENT_PACKAGE_VERSION
@@ -1081,7 +1084,7 @@ CONFIGURE_OPTIONS+=("--enable-libmodplug")
 
 if build "libmysofa" "1.2.1"; then
   download "https://codeload.github.com/hoene/libmysofa/tar.gz/refs/tags/v$CURRENT_PACKAGE_VERSION" "libmysofa-$CURRENT_PACKAGE_VERSION.tar.gz"
-  execute cmake . -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include  -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF 
+  execute cmake . -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include  -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF
   execute make -j $MJOBS
   execute make install
   build_done "libmysofa" $CURRENT_PACKAGE_VERSION
@@ -1331,15 +1334,6 @@ if [[ "$OSTYPE" == "linux-gnu" ]]; then
   CONFIGURE_OPTIONS+=("--enable-amf")
 fi
 
-##
-## FFmpeg
-##
-
-EXTRA_VERSION=""
-if [[ "$OSTYPE" == "darwin"* ]]; then
-  EXTRA_VERSION="${FFMPEG_VERSION}"
-fi
-
 if [[ "$OSTYPE" == "darwin"* ]]; then
   ##
   ## glew library
@@ -1347,24 +1341,34 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   if build "glew" "2.2.0"; then
     download "https://downloads.sourceforge.net/project/glew/glew/$CURRENT_PACKAGE_VERSION/glew-$CURRENT_PACKAGE_VERSION.tgz?ts=gAAAAABmUFwLNVBlnLYwFu66kCRJsx5agAlj-jmZfJ5VfouY4ZF2U76DIhNlucqRdOK52eXIzDpp19sKLJRjiFKaj9SG3A-ndA%3D%3D&r=https%3A%2F%2Fsourceforge.net%2Fprojects%2Fglew%2Ffiles%2Fglew%2F$CURRENT_PACKAGE_VERSION%2Fglew-2.2.0.tgz%2Fdownload" "glew-$CURRENT_PACKAGE_VERSION.tgz"
     cd build
-    execute cmake ./cmake -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF
+    execute cmake ./cmake -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF -DUSE_STATIC_LIBSTDCXX=ON
     execute make -j $MJOBS
     execute make install
     build_done "glew" $CURRENT_PACKAGE_VERSION
   fi
-  EXTRALIBS+=" -lglew"
+  EXTRALIBS+=" -lGLEW"
 
   ##
-  ## glew library
+  ## glfw library
   ##
   if build "glfw" "3.3.8"; then
     download "https://github.com/glfw/glfw/archive/refs/tags/$CURRENT_PACKAGE_VERSION.tar.gz" "glfw-$CURRENT_PACKAGE_VERSION.tgz"
-    execute cmake . -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF
+    execute cmake . -DCMAKE_INSTALL_PREFIX="${WORKSPACE}" -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_BINDIR=bin -DCMAKE_INSTALL_INCLUDEDIR=include -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DBUILD_SHARED_LIBS=OFF -DUSE_STATIC_LIBSTDCXX=ON
     execute make -j $MJOBS
     execute make install
+    # sed -i.backup 's/-lglfw3/-lglfw3 -lstdc++/g' "${WORKSPACE}/lib/pkgconfig/glfw3.pc"
     build_done "glfw" $CURRENT_PACKAGE_VERSION
   fi
   EXTRALIBS+=" -lglfw3"
+fi
+
+##
+## FFmpeg
+##
+
+EXTRA_VERSION=""
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  EXTRA_VERSION="${FFMPEG_VERSION}"
 fi
 
 
@@ -1376,6 +1380,21 @@ fi
 
 build "ffmpeg" "$FFMPEG_VERSION"
 download "https://github.com/FFmpeg/FFmpeg/archive/refs/heads/release/$FFMPEG_VERSION.tar.gz" "FFmpeg-release-$FFMPEG_VERSION.tar.gz"
+
+# ffmpeg-gl-transition
+build "ffmpeg-gl-transition" "$FFMPEG_VERSION"
+if command_exists "sudo" && [[ $INSTALL_FOLDER == /usr* ]]; then
+  SUDO=sudo
+fi
+$SUDO cp "$FFMPEG_BUILD_PATH/ffmpeg-gl-transition/vf_gltransition.c" "./libavfilter/"
+git apply $FFMPEG_BUILD_PATH/ffmpeg-gl-transition/ffmpeg6.0.diff
+
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  EXTRALIBS+=" -framework Cocoa -framework IOKit"
+fi
+
+echo "configure $FFMPEG_VERSION"
 # shellcheck disable=SC2086
 ./configure "${CONFIGURE_OPTIONS[@]}" \
   --disable-debug \
